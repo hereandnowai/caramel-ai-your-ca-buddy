@@ -55,27 +55,28 @@ test.describe('CA Buddy acceptance flow', () => {
     await page.getByRole('textbox', { name: /question/i }).fill('Does this apply to my unusual cross-state case?')
     await page.getByRole('button', { name: /ask ca buddy/i }).click()
 
-    await expect(page.getByText(/consult a Chartered Accountant/i)).toBeVisible()
+    await expect(page.getByRole('log', { name: /conversation/i }).getByText(/consult a Chartered Accountant/i)).toBeVisible()
   })
 
   test('sends conversation context and clears it with New chat', async ({ page }) => {
     const mock = await mockGemini(page, ['First answer', 'Follow-up answer', 'Fresh answer'])
     await page.goto('/')
     const input = page.getByRole('textbox', { name: /question/i })
+    const conversation = page.getByRole('log', { name: /conversation/i })
 
     await input.fill('First question')
     await page.getByRole('button', { name: /ask ca buddy/i }).click()
-    await expect(page.getByText('First answer')).toBeVisible()
+    await expect(conversation.getByText('First answer', { exact: true })).toBeVisible()
     await input.fill('Follow-up question')
     await page.getByRole('button', { name: /ask ca buddy/i }).click()
-    await expect(page.getByText('Follow-up answer')).toBeVisible()
+    await expect(conversation.getByText('Follow-up answer', { exact: true })).toBeVisible()
     expect(JSON.stringify(mock.bodies[1])).toContain('First question')
 
     await page.getByRole('button', { name: /new chat/i }).click()
     await expect(page.getByText('First question')).not.toBeVisible()
     await input.fill('Fresh question')
     await page.getByRole('button', { name: /ask ca buddy/i }).click()
-    await expect(page.getByText('Fresh answer')).toBeVisible()
+    await expect(conversation.getByText('Fresh answer', { exact: true })).toBeVisible()
     expect(JSON.stringify(mock.bodies[2])).not.toContain('First question')
   })
 
