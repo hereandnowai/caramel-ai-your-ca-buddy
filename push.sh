@@ -9,6 +9,12 @@ CUSTOM_MESSAGE="${1:-}"
 # Always operate from the project root, even when this script is launched elsewhere.
 cd "$SCRIPT_DIR"
 
+# Remember whether this branch has an upstream before making a new commit.
+first_push=true
+if git config --get branch.main.remote >/dev/null 2>&1; then
+  first_push=false
+fi
+
 # First-run setup: initialize Git, prepare ignore rules, authenticate, and connect GitHub.
 if [[ ! -d .git || -z "$(git remote get-url origin 2>/dev/null || true)" ]]; then
   echo "Initialising Git repository"
@@ -64,26 +70,34 @@ git add -A
 # Avoid creating empty commits and leave the working tree in a successful state.
 if git diff --cached --quiet; then
   echo "Nothing to commit"
-  exit 0
+else
+  # Number this commit after the number of commits already in the repository.
+  commit_number="$(git rev-list --count HEAD 2>/dev/null || printf '0')"
+  commit_number=$((commit_number + 1))
+  commit_message="Commit #${commit_number} - $(date '+%Y-%m-%d %H:%M')"
+  if [[ -n "$CUSTOM_MESSAGE" ]]; then
+    commit_message+=" - $CUSTOM_MESSAGE"
+  fi
+
+  echo "Committing changes"
+  git commit -m "$commit_message"
 fi
 
-# Number this commit after the number of commits already in the repository.
-commit_number="$(git rev-list --count HEAD 2>/dev/null || printf '0')"
-commit_number=$((commit_number + 1))
-commit_message="Commit #${commit_number} - $(date '+%Y-%m-%d %H:%M')"
-if [[ -n "$CUSTOM_MESSAGE" ]]; then
-  commit_message+=" - $CUSTOM_MESSAGE"
+# Integrate an existing remote root before the first push instead of overwriting it.
+if [[ "$first_push" == true ]] && git ls-remote --exit-code origin refs/heads/main >/dev/null 2>&1; then
+  echo "Synchronising existing remote history"
+  git fetch origin main
+  if ! git merge-base --is-ancestor origin/main HEAD; then
+    git merge origin/main --allow-unrelated-histories -m "Merge remote main"
+  fi
 fi
-
-echo "Committing changes"
-git commit -m "$commit_message"
 
 # Set upstream on the first push; later pushes use the existing tracking configuration.
 echo "Pushing changes"
-if git config --get branch.main.remote >/dev/null 2>&1; then
-  git push
-else
+if [[ "$first_push" == true ]]; then
   git push -u origin main
+else
+  git push
 fi
 
 # Show the pushed commit and the canonical GitHub repository URL.
